@@ -1,0 +1,5 @@
+{"event_type":"CHECKOUT","total_events":1322,"success_count":1193,"error_count":129,"avg_latency_ms":783.4780635400907}
+{"event_type":"VIEW_PRODUCT","total_events":1366,"success_count":1231,"error_count":135,"avg_latency_ms":773.3060029282577}
+{"event_type":"PAYMENT","total_events":1339,"success_count":1192,"error_count":147,"avg_latency_ms":783.0156833457804}
+{"event_type":"ADD_TO_CART","total_events":1451,"success_count":1271,"error_count":180,"avg_latency_ms":762.9510682288077}
+{"event_type":"SEARCH","total_events":1345,"success_count":1213,"error_count":132,"avg_latency_ms":778.9702602230483}

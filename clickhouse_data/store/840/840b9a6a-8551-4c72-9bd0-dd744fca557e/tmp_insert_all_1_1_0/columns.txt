@@ -1,0 +1,7 @@
+columns format version: 1
+5 columns:
+`event_type` String
+`total_events` UInt64
+`success_count` UInt64
+`error_count` UInt64
+`avg_latency_ms` Float64

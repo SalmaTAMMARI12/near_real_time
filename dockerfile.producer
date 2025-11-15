@@ -1,0 +1,24 @@
+FROM python:3.10-slim
+
+# Définir le répertoire de travail
+WORKDIR /app
+
+# Copier les fichiers de requirements
+COPY requirements.txt .
+
+# Installer les dépendances
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copier les scripts et config
+COPY scripts/ /app/scripts/
+COPY .env /app/.env
+
+# Créer le dossier logs
+RUN mkdir -p /app/logs
+
+# Variables d'environnement par défaut
+ENV DOCKER=1
+ENV PYTHONUNBUFFERED=1
+
+# Le CMD sera défini dans docker-compose.yml
+CMD ["python", "/app/scripts/myproducer.py"]

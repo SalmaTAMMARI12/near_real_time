@@ -1,0 +1,26 @@
+FROM apache/airflow:2.7.2-python3.10
+
+# Passe en root pour installer des packages système
+USER root
+
+# Installation des dépendances système si nécessaire
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Retour à l'utilisateur airflow
+USER airflow
+
+# Installation des dépendances Python
+RUN pip install --no-cache-dir \
+    confluent-kafka==2.3.0 \
+    psycopg2-binary==2.9.9 \
+    clickhouse-driver==0.2.6 \
+    apache-airflow-providers-apache-spark==4.3.0
+
+# Copie des scripts (optionnel, peut aussi être fait via volumes)
+# COPY --chown=airflow:root scripts /opt/airflow/scripts
+
+WORKDIR /opt/airflow

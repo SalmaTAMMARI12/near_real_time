@@ -1,0 +1,281 @@
+version: '3.8'
+
+networks:
+  spark-net:
+    driver: bridge
+
+services:
+  # ============================================
+  # ===== KAFKA + ZOOKEEPER ====================
+  # ============================================
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper-simple
+    ports:
+      - "2181:2181"
+    networks:
+      - spark-net
+    restart: always
+
+  kafka:
+    image: wurstmeister/kafka
+    container_name: kafka-simple
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka-simple
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - spark-net
+    depends_on:
+      - zookeeper
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ============================================
+  # ===== POSTGRES (pour les events) ==========
+  # ============================================
+  postgres:
+    image: postgres:14-alpine
+    container_name: postgres-events
+    environment:
+      POSTGRES_DB: kafka_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: testpassword123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_events_data:/var/lib/postgresql/data
+    networks:
+      - spark-net
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # ===== PYTHON PRODUCER ======================
+  # ============================================
+  python-producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+    container_name: python-producer
+    environment:
+      DOCKER: "1"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka-simple:9092"
+      KAFKA_TOPIC: "user_events"
+      NUM_WORKERS: "2"
+      EVENT_INTERVAL_SECONDS: "0.01"
+      NEW_USER_SESSION_PROBABILITY: "0.01"
+    volumes:
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+    networks:
+      - spark-net
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # ===== PYTHON CONSUMER ======================
+  # ============================================
+  python-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+    container_name: python-consumer
+    environment:
+      DOCKER: "1"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka-simple:9092"
+      KAFKA_TOPIC: "user_events"
+      POSTGRES_HOST: "postgres-events"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "kafka_db"
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "testpassword123"
+    volumes:
+      - ./scripts:/app/scripts
+      - ./logs:/app/logs
+    networks:
+      - spark-net
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # ===== SUPERSET + REDIS + POSTGRES ==========
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: superset-redis
+    networks:
+      - spark-net
+    restart: always
+
+  postgres-superset:
+    image: postgres:14-alpine
+    container_name: superset-postgres
+    environment:
+      POSTGRES_DB: superset
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset
+    volumes:
+      - postgres_superset_data:/var/lib/postgresql/data
+    networks:
+      - spark-net
+    restart: always
+
+  # ============================================
+  # ===== CLICKHOUSE ===========================
+  # ============================================
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: monMotDePasse123
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - spark-net
+    restart: always
+
+  # ============================================
+  # ===== SPARK ================================
+  # ============================================
+  spark:
+    image: apache/spark:3.5.0
+    container_name: spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_NO_DAEMONIZE=true
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
+    volumes:
+      - C:/Users/hp/Desktop/amazon_product_reviewz:/opt/spark/work-dir
+    networks:
+      - spark-net
+    depends_on:
+      - postgres
+    restart: always
+
+  # ============================================
+  # ===== METABASE =============================
+  # ============================================
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./metabase-data:/metabase-data
+    networks:
+      - spark-net
+    restart: always
+
+  # ============================================
+  # ===== AIRFLOW ==============================
+  # ============================================
+  postgres-airflow:
+    image: postgres:13
+    container_name: postgres-airflow
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_airflow_volume:/var/lib/postgresql/data
+    networks:
+      - spark-net
+    restart: always
+
+  airflow-webserver:
+    image: apache/airflow:2.7.2-python3.10
+    container_name: airflow-webserver
+    depends_on:
+      - postgres-airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'false'
+      AIRFLOW__CORE__FERNET_KEY: 'DUMMY_FERNET_KEY'
+      _PIP_ADDITIONAL_REQUIREMENTS: confluent-kafka psycopg2-binary clickhouse-driver apache-airflow-providers-apache-spark 
+    ports:
+      - "8088:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts
+    entrypoint: >
+      bash -c "
+        pip install --no-cache-dir confluent-kafka psycopg2-binary clickhouse-driver &&
+        airflow db migrate &&
+        airflow users create --username admin --password admin --firstname Salma --lastname Tammari --role Admin --email admin@example.com || true &&
+        exec airflow webserver
+      "
+    restart: always
+    networks:
+      - spark-net
+
+  airflow-scheduler:
+    image: apache/airflow:2.7.2-python3.10
+    container_name: airflow-scheduler
+    depends_on:
+      - airflow-webserver
+      - postgres-airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      _PIP_ADDITIONAL_REQUIREMENTS: confluent-kafka psycopg2-binary clickhouse-driver apache-airflow-providers-apache-spark
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./scripts:/opt/airflow/scripts
+    entrypoint: >
+      bash -c "
+        pip install --no-cache-dir confluent-kafka psycopg2-binary clickhouse-driver &&
+        exec airflow scheduler
+      "
+    restart: always
+    networks:
+      - spark-net
+
+# ============================================
+# ===== VOLUMES ==============================
+# ============================================
+volumes:
+  postgres_events_data:
+  postgres_superset_data:
+  clickhouse_data:
+  postgres_airflow_volume:

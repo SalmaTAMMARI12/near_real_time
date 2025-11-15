@@ -1,0 +1,1 @@
+{"columns":[{"kind":"Default","name":"avg_latency_ms","num_defaults":0,"num_rows":5},{"kind":"Default","name":"error_count","num_defaults":0,"num_rows":5},{"kind":"Default","name":"event_type","num_defaults":0,"num_rows":5},{"kind":"Default","name":"success_count","num_defaults":0,"num_rows":5},{"kind":"Default","name":"total_events","num_defaults":0,"num_rows":5}],"version":0}

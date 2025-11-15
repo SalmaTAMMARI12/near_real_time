@@ -1,0 +1,30 @@
+FROM python:3.10-slim
+
+# Installer netcat pour le healthcheck wait
+RUN apt-get update && apt-get install -y netcat-traditional && rm -rf /var/lib/apt/lists/*
+
+# Définir le répertoire de travail
+WORKDIR /app
+
+# Copier les fichiers de requirements
+COPY requirements.txt .
+
+# Installer les dépendances
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copier les scripts et config
+COPY scripts/ /app/scripts/
+COPY .env /app/.env
+COPY wait-for-services.sh /app/wait-for-services.sh
+
+# Créer le dossier logs
+RUN mkdir -p /app/logs
+
+# Rendre le script exécutable
+RUN chmod +x /app/wait-for-services.sh
+
+# Variables d'environnement par défaut
+ENV DOCKER=1
+ENV PYTHONUNBUFFERED=1
+
+CMD ["/app/wait-for-services.sh"]

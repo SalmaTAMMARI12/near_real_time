@@ -9,4 +9,5 @@ Il est conçu pour des cas comme l’ingestion d’événements, le monitoring d
 
 ## 🧩 Architecture du projet
 
-<!-- Ajoute ici ton schéma -->
+<img width="1436" height="591" alt="archi_proje_near" src="https://github.com/user-attachments/assets/c8ea0f9e-54ee-48a2-b4a4-fb27056d8b9a" />
+
